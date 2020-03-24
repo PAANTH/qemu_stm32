@@ -271,6 +271,20 @@ void clktree_set_scale(Clk clk, uint16_t multiplier, uint16_t divisor)
 }
 
 
+void clktree_set_mult(Clk clk, uint16_t multiplier)
+{
+    clk->multiplier = multiplier;
+
+    clktree_recalc_output_freq(clk);
+}
+
+void clktree_set_div(Clk clk, uint16_t divisor)
+{
+    clk->divisor = divisor;
+
+    clktree_recalc_output_freq(clk);
+}
+
 void clktree_set_enabled(Clk clk, bool enabled)
 {
     clk->enabled = enabled;

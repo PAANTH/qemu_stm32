@@ -69,6 +69,11 @@ Clk clktree_create_clk(
 
 /* Set the multiplier and divider scales. */
 void clktree_set_scale(Clk clk, uint16_t multiplier, uint16_t divisor);
+/* Set the multiplier scale. */
+void clktree_set_mult(Clk clk, uint16_t multiplier);
+/* Set the divider scale. */
+void clktree_set_div(Clk clk, uint16_t divisor);
+
 
 /* Enable or disable the clock output. */
 void clktree_set_enabled(Clk clk, bool enabled);

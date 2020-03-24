@@ -56,6 +56,9 @@ int main(int argc, char **argv)
 #define main qemu_main
 #endif /* CONFIG_COCOA */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #include <glib.h>
 
 #include "qemu/sockets.h"
@@ -4547,3 +4550,5 @@ int main(int argc, char **argv, char **envp)
 
     return 0;
 }
+
+#pragma GCC diagnostic pop

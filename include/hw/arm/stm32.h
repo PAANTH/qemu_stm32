@@ -132,6 +132,7 @@ enum {
     STM32_CRYP_PERIPH,
     STM32_HASH_PERIPH,
     STM32_RNG_PERIPH,
+    STM32_FLASH_PERIPH,
     STM32_PERIPH_COUNT,
 };
 
@@ -211,7 +212,7 @@ const char *stm32_periph_name(stm32_periph_t periph);
 
 #define TIM5_IRQn               50     /*!< TIM5 global Interrupt                                */
 #define TIM6_DAC_IRQn           54     /*!< TIM6 and DAC underrun Interrupt                      */
-#define TIM7_IRQn               55     /*!< TIM7 Interrupt                                       */       
+#define TIM7_IRQn               55     /*!< TIM7 Interrupt                                       */
 #define STM32_ETH_WKUP_IRQ 62
 
 
@@ -281,8 +282,11 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 
 
 
+/* FLASH */
+typedef struct Stm32Flash Stm32Flash;
 
-
+#define TYPE_STM32_FLASH "stm32-flash"
+#define STM32_FLASH(obj) OBJECT_CHECK(Stm32Flash, (obj), TYPE_STM32_FLASH)
 
 /* RCC */
 typedef struct Stm32Rcc Stm32Rcc;

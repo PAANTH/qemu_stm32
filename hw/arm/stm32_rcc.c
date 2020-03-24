@@ -275,7 +275,12 @@ struct Stm32Rcc {
         RCC_AHBENR;
 
     /* Register Field Values */
-    uint32_t
+    uint32_t //CR
+        RCC_CR_PLL3ON,
+        RCC_CR_PLL2ON,
+        RCC_CR_PLLON;
+
+    uint32_t //CFGR
         RCC_CFGR_PLLMUL,
         RCC_CFGR_PLLXTPRE,
         RCC_CFGR_PLLSRC,
@@ -284,6 +289,15 @@ struct Stm32Rcc {
         RCC_CFGR_HPRE,
         RCC_CFGR_SW,
         RTC_SEL;
+
+    uint32_t //CFGR2
+        RCC_CFGR2_I2S3SRC,
+        RCC_CFGR2_I2S2SRC,
+        RCC_CFGR2_PREDIV1SRC,
+        RCC_CFGR2_PLL3MUL,
+        RCC_CFGR2_PLL2MUL,
+        RCC_CFGR2_PREDIV2,
+        RCC_CFGR2_PREDIV1;
 
     /* Bit CSR register values */
     bool
@@ -298,6 +312,8 @@ struct Stm32Rcc {
         LSICLK,
         SYSCLK,
         PLLXTPRECLK,
+        PREDIV1SCRCLK,
+        PLLSCRCLK,
         PLLCLK,
         HCLK, /* Output from AHB Prescaler */
         PCLK1, /* Output from APB1 Prescaler */
@@ -336,7 +352,18 @@ static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
     int pllon_bit = clktree_is_enabled(s->PLLCLK) ? 1 : 0;
     int hseon_bit = clktree_is_enabled(s->HSECLK) ? 1 : 0;
     int hsion_bit = clktree_is_enabled(s->HSICLK) ? 1 : 0;
+    int pll2on_bit = 0;
+    int pll3on_bit = 0;
 
+
+    if (s->RCC_CR_PLL3ON) {
+      pll3on_bit = 1;
+    }
+
+    if (s->RCC_CR_PLL2ON) {
+      pll2on_bit = 1;
+    }
+    //printf("CR read pll2on_bit %u\n", pll2on_bit);
     /* build the register value based on the clock states.  If a clock is on,
      * then its ready bit is always set.
      */
@@ -345,7 +372,11 @@ static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
            hseon_bit << RCC_CR_HSERDY_BIT |
            hseon_bit << RCC_CR_HSEON_BIT |
            hsion_bit << RCC_CR_HSIRDY_BIT |
-           hsion_bit << RCC_CR_HSION_BIT;
+           hsion_bit << RCC_CR_HSION_BIT |
+           pll2on_bit << RCC_CR_PLL2ON_CL_BIT |
+           pll2on_bit << RCC_CR_PLL2RDY_CL_BIT|
+           pll3on_bit << RCC_CR_PLL3ON_CL_BIT |
+           pll3on_bit << RCC_CR_PLL3RDY_CL_BIT;
 }
 
 /* Write the Configuration Register.
@@ -355,7 +386,15 @@ static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
  */
 static void stm32_rcc_RCC_CR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
-    bool new_pllon, new_hseon, new_hsion;
+    bool new_pllon, new_pll2on, new_pll3on, new_hseon, new_hsion;
+    //printf("CR write val 0x%04X\n", new_value);
+
+    new_pll3on = new_value & BIT(RCC_CR_PLL3ON_CL_BIT);
+    s->RCC_CR_PLL3ON = new_pll3on;
+
+    new_pll2on = new_value & BIT(RCC_CR_PLL2ON_CL_BIT);
+    s->RCC_CR_PLL2ON = new_pll2on;
+
 
     new_pllon = new_value & BIT(RCC_CR_PLLON_BIT);
     if((clktree_is_enabled(s->PLLCLK) && !new_pllon) &&
@@ -401,7 +440,7 @@ static uint32_t stm32_rcc_RCC_CFGR_read(Stm32Rcc *s)
 
 static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
-    uint32_t new_PLLMUL, new_PLLXTPRE, new_PLLSRC;
+    uint32_t new_PLLMUL, new_PLLSRC;
 
     /* PLLMUL */
     new_PLLMUL = extract32(new_value,
@@ -413,24 +452,30 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
                stm32_hw_warn("Can only change PLLMUL while PLL is disabled");
           }
     }
-    assert(new_PLLMUL <= 0xf);
-    if(new_PLLMUL == 0xf) {
-        clktree_set_scale(s->PLLCLK, 16, 1);
-    } else {
-        clktree_set_scale(s->PLLCLK, new_PLLMUL + 2, 1);
-    }
-    s->RCC_CFGR_PLLMUL = new_PLLMUL;
 
-    /* PLLXTPRE */
-    new_PLLXTPRE = extract32(new_value, RCC_CFGR_PLLXTPRE_BIT, 1);
-    if(!init) {
-        if(clktree_is_enabled(s->PLLCLK) &&
-           (new_PLLXTPRE != s->RCC_CFGR_PLLXTPRE)) {
-            stm32_hw_warn("Can only change PLLXTPRE while PLL is disabled");
-        }
+    /*
+      value 0xd that gives mul factor = 6.5 is not supported
+    */
+    //printf("set pllmul init %u, value = %u\n", init, new_PLLMUL);
+    if ((new_PLLMUL <= 0x8) && (new_PLLMUL > 0x2)) {
+      clktree_set_scale(s->PLLCLK, new_PLLMUL + 2, 1);
+      s->RCC_CFGR_PLLMUL = new_PLLMUL;
+    } else {
+      if (!init) printf("pllmul value is not in range! %u\n", new_PLLMUL);
     }
-    clktree_set_selected_input(s->PLLXTPRECLK, new_PLLXTPRE);
-    s->RCC_CFGR_PLLXTPRE = new_PLLXTPRE;
+
+
+
+    /* PLLXTPRE */ //do later
+    // new_PLLXTPRE = extract32(new_value, RCC_CFGR_PLLXTPRE_BIT, 1);
+    // if(!init) {
+    //     if(clktree_is_enabled(s->PLLCLK) &&
+    //        (new_PLLXTPRE != s->RCC_CFGR_PLLXTPRE)) {
+    //         stm32_hw_warn("Can only change PLLXTPRE while PLL is disabled");
+    //     }
+    // }
+    // clktree_set_selected_input(s->PLLXTPRECLK, new_PLLXTPRE);
+    // s->RCC_CFGR_PLLXTPRE = new_PLLXTPRE;
 
     /* PLLSRC */
     new_PLLSRC = extract32(new_value, RCC_CFGR_PLLSRC_BIT, 1);
@@ -440,7 +485,9 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
             stm32_hw_warn("Can only change PLLSRC while PLL is disabled");
         }
     }
-    clktree_set_selected_input(s->PLLCLK, new_PLLSRC);
+    // we set PLLSCRCLK source but no PLLSRC as for f107 i decided to pick out PLLSCRCLK as clock
+    // and => PLLSRC has only one input - PLLSCRCLK
+    clktree_set_selected_input(s->PLLSCRCLK, new_PLLSRC);
     s->RCC_CFGR_PLLSRC = new_PLLSRC;
 
     /* PPRE2 */
@@ -470,9 +517,11 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     /* SW */
     s->RCC_CFGR_SW = (new_value & RCC_CFGR_SW_MASK) >> RCC_CFGR_SW_START;
     switch(s->RCC_CFGR_SW) {
+
         case 0x0:
         case 0x1:
         case 0x2:
+            printf("setting SW %u\n", s->RCC_CFGR_SW);
             clktree_set_selected_input(s->SYSCLK, s->RCC_CFGR_SW);
             break;
         default:
@@ -565,19 +614,19 @@ static uint32_t stm32_rcc_RCC_BDCR_read(Stm32Rcc *s)
     int RTCEN_bit = clktree_is_enabled(s->PERIPHCLK[STM32_RTC]) ? 1 : 0;
     return lseon_bit << RCC_BDCR_LSERDY_BIT |
            lseon_bit << RCC_BDCR_LSEON_BIT  |
-           s->RTC_SEL << RCC_BDCR_RTCSEL_START | 
+           s->RTC_SEL << RCC_BDCR_RTCSEL_START |
            RTCEN_bit  << RCC_BDCR_RTCEN_BIT;
 }
 
 static void stm32_rcc_RCC_BDCR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
-     clktree_set_enabled(s->LSECLK,new_value & BIT(RCC_BDCR_LSEON_BIT));    
+     clktree_set_enabled(s->LSECLK,new_value & BIT(RCC_BDCR_LSEON_BIT));
     /* select input CLOCK for RTC  */
     /* RTCSEL =(0,1,2,3) => intput CLK=(0,LSE,LSI,HSE/128)
-       see datasheet page 151*/ 
+       see datasheet page 151*/
     s->RTC_SEL=((new_value & RCC_BDCR_RTCSEL_MASK) >> RCC_BDCR_RTCSEL_START);
     clktree_set_selected_input(s->PERIPHCLK[STM32_RTC],s->RTC_SEL-1);
-    /* enable RTC CLOCK if RTCEN = 1 and RTCSEL !=0 */ 
+    /* enable RTC CLOCK if RTCEN = 1 and RTCSEL !=0 */
     if(s->RTC_SEL){
     clktree_set_enabled(s->PERIPHCLK[STM32_RTC],
                        (new_value >> RCC_BDCR_RTCEN_BIT)&0x01);
@@ -599,6 +648,58 @@ static uint32_t stm32_rcc_RCC_CSR_read(Stm32Rcc *s)
 static void stm32_rcc_RCC_CSR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
     clktree_set_enabled(s->LSICLK, new_value & BIT(RCC_CSR_LSION_BIT));
+}
+
+//for CL-devices
+static uint32_t stm32_rcc_RCC_CFGR2_read(Stm32Rcc *s)
+{
+    return (s->RCC_CFGR2_I2S3SRC << RCC_CFGR2_I2S3SRC_BIT) |
+           (s->RCC_CFGR2_I2S2SRC << RCC_CFGR2_I2S2SRC_BIT) |
+           (s->RCC_CFGR2_PREDIV1SRC << RCC_CFGR2_PREDIV1SRC_BIT) |
+           (s->RCC_CFGR2_PLL3MUL << RCC_CFGR2_PLL3MUL_START) |
+           (s->RCC_CFGR2_PLL2MUL << RCC_CFGR2_PLL2MUL_START) |
+           (s->RCC_CFGR2_PREDIV2 << RCC_CFGR2_PREDIV2_START) |
+           (s->RCC_CFGR2_PREDIV1 << RCC_CFGR2_PREDIV_START);
+}
+
+//for CL-devices
+static void stm32_rcc_RCC_CFGR2_write(Stm32Rcc *s, uint32_t new_value, bool init)
+{
+
+    /*
+      PREDIV1SCRCLK
+      do not need to set input as hse is the only one
+      if this bit is set => hse is routed via prediv2/pll2mul
+    */
+    s->RCC_CFGR2_PREDIV1SRC = extract32(new_value, RCC_CFGR2_PREDIV1SRC_BIT, 1);
+
+
+    /* PLL3MUL */
+    //TODO
+
+    /* PLL2MUL */
+
+    s->RCC_CFGR2_PLL2MUL = (new_value & RCC_CFGR2_PLL2MUL_MASK) >> RCC_CFGR2_PLL2MUL_START;
+    //printf("set pll2mul init %u, value = %u\n", init, s->RCC_CFGR2_PLL2MUL);
+    if((s->RCC_CFGR2_PLL2MUL >= 0x6) && (s->RCC_CFGR2_PLL2MUL <= 0xc)) {
+        clktree_set_mult(s->PREDIV1SCRCLK, s->RCC_CFGR2_PLL2MUL + 2);
+    } else if (s->RCC_CFGR2_PLL2MUL == 0xe) {
+        clktree_set_mult(s->PREDIV1SCRCLK, 16);
+    } else if (s->RCC_CFGR2_PLL2MUL == 0xf) {
+        clktree_set_mult(s->PREDIV1SCRCLK, 20);
+    } else {
+        if (!init) printf("pll2mul value is not in range %u\n", s->RCC_CFGR2_PLL2MUL);
+    }
+
+    /* PPREDIV2 */
+    s->RCC_CFGR2_PREDIV2 = (new_value & RCC_CFGR2_PREDIV2_MASK) >> RCC_CFGR2_PREDIV2_START;
+    clktree_set_div(s->PREDIV1SCRCLK, s->RCC_CFGR2_PREDIV2 + 1);
+
+    /* PPREDIV1 */
+    s->RCC_CFGR2_PREDIV1 = (new_value & RCC_CFGR2_PREDIV_MASK) >> RCC_CFGR2_PREDIV_START;
+    clktree_set_div(s->PLLSCRCLK, s->RCC_CFGR2_PREDIV1 + 1);
+
+
 }
 
 static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
@@ -632,7 +733,7 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
             STM32_NOT_IMPL_REG(offset, 4);
             return 0;
         case RCC_CFGR2_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            return stm32_rcc_RCC_CFGR2_read(s);
             return 0;
         default:
             STM32_BAD_REG(offset, 4);
@@ -682,7 +783,7 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             STM32_NOT_IMPL_REG(offset, 4);
             break;
         case RCC_CFGR2_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            stm32_rcc_RCC_CFGR2_write(s, value, false);
             break;
         default:
             STM32_BAD_REG(offset, 4);
@@ -733,6 +834,7 @@ static void stm32_rcc_reset(DeviceState *dev)
     stm32_rcc_RCC_AHBENR_write(s, 0x00000000, true);
     stm32_rcc_RCC_BDCR_write(s, 0x00000000, true);
     stm32_rcc_RCC_CSR_write(s, 0x0c000000, true);
+    stm32_rcc_RCC_CFGR2_write(s, 0x00000000, true);
 }
 
 /* IRQ handler to handle updates to the HCLK frequency.
@@ -754,6 +856,7 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
          * system/external clock ticks.
          */
         system_clock_scale = get_ticks_per_sec() / hclk_freq;
+        printf("system_clock_scale %u\n", system_clock_scale);
         external_ref_clock_scale = get_ticks_per_sec() / ext_ref_freq;
     }
 
@@ -828,7 +931,7 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
     int i;
     qemu_irq *hclk_upd_irq =
             qemu_allocate_irqs(stm32_rcc_hclk_upd_irq_handler, s, 1);
-    Clk HSI_DIV2, HSE_DIV2;
+    Clk HSI_DIV2;
 
     /* Make sure all the peripheral clocks are null initially.
      * This will be used for error checking to make sure
@@ -851,20 +954,26 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
 
      /* for RTCCLK */
     s->HSE_DIV128 = clktree_create_clk("HSE/128", 1, 128, true, CLKTREE_NO_MAX_FREQ, 0,
-                        s->HSECLK, NULL);    
+                        s->HSECLK, NULL);
 
     HSI_DIV2 = clktree_create_clk("HSI/2", 1, 2, true, CLKTREE_NO_MAX_FREQ, 0,
                         s->HSICLK, NULL);
-    HSE_DIV2 = clktree_create_clk("HSE/2", 1, 2, true, CLKTREE_NO_MAX_FREQ, 0,
-                        s->HSECLK, NULL);
+    // HSE_DIV2 = clktree_create_clk("HSE/2", 1, 2, true, CLKTREE_NO_MAX_FREQ, 0,
+    //                     s->HSECLK, NULL);
 
-    s->PLLXTPRECLK = clktree_create_clk("PLLXTPRE", 1, 1, true, CLKTREE_NO_MAX_FREQ, CLKTREE_NO_INPUT,
-                        s->HSECLK, HSE_DIV2, NULL);
+    // s->PLLXTPRECLK = clktree_create_clk("PLLXTPRE", 1, 1, true, CLKTREE_NO_MAX_FREQ, CLKTREE_NO_INPUT,
+    //                     s->HSECLK, HSE_DIV2, NULL);
     /* PLLCLK contains both the switch and the multiplier, which are shown as
      * two separate components in the clock tree diagram.
      */
-    s->PLLCLK = clktree_create_clk("PLLCLK", 0, 1, false, 72000000, CLKTREE_NO_INPUT,
-                        HSI_DIV2, s->PLLXTPRECLK, NULL);
+    s->PREDIV1SCRCLK = clktree_create_clk("PREDIV1SCRCLK", 1, 1, true, CLKTREE_NO_MAX_FREQ, 0,
+                        s->HSECLK, NULL);
+
+    s->PLLSCRCLK = clktree_create_clk("PLLSCRCLK", 1, 1, true, CLKTREE_NO_MAX_FREQ, CLKTREE_NO_INPUT,
+                                   HSI_DIV2, s->PREDIV1SCRCLK, NULL);
+
+    s->PLLCLK = clktree_create_clk("PLLCLK", 1, 1, true, 72000000, 0,
+                                   s->PLLSCRCLK, NULL);
 
     s->SYSCLK = clktree_create_clk("SYSCLK", 1, 1, true, 72000000, CLKTREE_NO_INPUT,
                         s->HSICLK, s->HSECLK, s->PLLCLK, NULL);

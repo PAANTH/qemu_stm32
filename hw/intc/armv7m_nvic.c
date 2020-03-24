@@ -89,6 +89,7 @@ static void systick_reload(nvic_state *s, int reset)
 
     if (reset)
         s->systick.tick = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+
     s->systick.tick += (s->systick.reload + 1) * systick_scale(s);
     timer_mod(s->systick.timer, s->systick.tick);
 }

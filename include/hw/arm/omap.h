@@ -872,7 +872,7 @@ struct omap_mpu_state_s {
 
     struct soc_dma_s *dma;
 
-    struct omap_mpu_timer_s *timer[3];
+    struct omap_mpu_timer_s *timer[5];
     struct omap_watchdog_timer_s *wdt;
 
     struct omap_lcd_panel_s *lcd;
