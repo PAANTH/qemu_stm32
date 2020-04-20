@@ -316,6 +316,26 @@ static void stm32_uart_check_tx_pin(Stm32Uart *s)
                     break;
             }
             break;
+        case STM32_UART4:
+            // switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
+            //     case STM32_USART3_NO_REMAP:
+            //         tx_periph = STM32_GPIOB;
+            //         tx_pin = 10;
+            //         break;
+            //     case STM32_USART3_PARTIAL_REMAP:
+            //         tx_periph = STM32_GPIOC;
+            //         tx_pin = 10;
+            //         break;
+            //     case STM32_USART3_FULL_REMAP:
+            //         tx_periph = STM32_GPIOD;
+            //         tx_pin = 8;
+            //         break;
+            //     default:
+            //         assert(false);
+            //         break;
+            // }
+            return;
+            break;
         default:
             assert(false);
             break;
@@ -458,7 +478,7 @@ static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
         s->receiving = true;
         timer_mod(s->rx_timer,  curr_time + s->ns_per_char);
 #endif
-	}
+    }
 }
 
 
@@ -545,7 +565,7 @@ static void stm32_uart_USART_DR_read(Stm32Uart *s, uint32_t *read_value)
 static void stm32_uart_USART_DR_write(Stm32Uart *s, uint32_t new_value)
 {
     uint32_t write_value = new_value & 0x000001ff;
-
+    printf("uart4 dr write value %u\n", new_value);
     if(!s->USART_CR1_UE) {
         hw_error("Attempted to write to USART_DR while UART was disabled.");
     }

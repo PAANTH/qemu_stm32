@@ -9,6 +9,7 @@
 #include "hw/devices.h"
 #include "ui/console.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/char.h"
 #include "hw/boards.h"
 #include <sys/time.h>
 
@@ -49,7 +50,7 @@ static void stm32_f107_init(MachineState *machine)
 {
     const char* kernel_filename = machine->kernel_filename;
     qemu_irq *led_irq;
-
+    CharDriverState *chrd;
     stm32_init(/*flash_size*/0x0001ffff,
                /*ram_size*/0x00004fff,
                kernel_filename,
@@ -65,23 +66,25 @@ static void stm32_f107_init(MachineState *machine)
     DeviceState *uart2 = DEVICE(object_resolve_path("/machine/stm32/uart[2]", NULL));
     DeviceState *uart1 = DEVICE(object_resolve_path("/machine/stm32/uart[1]", NULL));
     DeviceState *uart3 = DEVICE(object_resolve_path("/machine/stm32/uart[3]", NULL));
+    DeviceState *uart4 = DEVICE(object_resolve_path("/machine/stm32/uart[4]", NULL));
     assert(gpio_a);
     assert(gpio_b);
     assert(gpio_c);
     assert(uart2);
     assert(uart1);
     assert(uart3);
+    assert(uart4);
     assert(tim4);
 
     /* Connect LED to GPIO B pin 0 */
     led_irq = qemu_allocate_irqs(led_irq_handler, NULL, 1);
     qdev_connect_gpio_out(gpio_b, 0, led_irq[0]);
 
-
-    /* Connect RS232 to UART 1 */
+    chrd = qemu_chr_new("pipe0", "pipe:./guest", NULL);
+    /* Connect pipe to UART 1 */
     stm32_uart_connect(
             (Stm32Uart *)uart1,
-            serial_hds[0],
+            chrd,
             STM32_USART1_NO_REMAP);
 
     /* These additional UARTs have not been tested yet... */
@@ -94,6 +97,12 @@ static void stm32_f107_init(MachineState *machine)
             (Stm32Uart *)uart3,
             serial_hds[2],
             STM32_USART3_NO_REMAP);
+
+    stm32_uart_connect(
+            (Stm32Uart *)uart4,
+            chrd,//qemu_chr_find("pipe"),
+            STM32_USART3_NO_REMAP);
+
  }
 
 static QEMUMachine stm32_f107_machine = {
