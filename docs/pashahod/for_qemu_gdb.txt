@@ -1,0 +1,23 @@
+//run
+
+gdb ./qemu-system-arm
+
+//to start qemu gdb
+
+//and then use "set args" command to pass params to qemu
+
+set args  -monitor stdio -M stm32f107 -cpu cortex-m3 -kernel /home/akashkin/side_sources/opack/test_proj/build/opack.bin
+
+//to disable reaction to SIGUSR1
+
+handle SIGUSR1 pass nostop noprint
+
+
+//to debug program emulated by qemu add to args
+ -gdb tcp::1234
+
+//and then launch gdb for programm
+//then there
+ target remote:1234
+
+ //use "load" cmd to restart program exec as monitor reset halt does not recognized by gdb(WTF?)
